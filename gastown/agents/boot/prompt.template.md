@@ -82,11 +82,18 @@ Use this fallback only if you exited a cycle without running `next-iteration`
 pour again.
 
 ```bash
+# Wisp roots are ephemeral rows, which `gc bd list` hides unless it is given
+# --include-infra; the flagless lookup this replaces returned zero rows even
+# with wisps open, so a cycle that had already queued a successor poured
+# another one. `gc bd query` selects the ephemeral tier directly, so there is
+# no flag left to forget.
+# ASSIGNED_WISP excludes $CURRENT_WISP by id — the wisp you are executing is
+# burned below, never mistaken for an already-queued successor.
 CURRENT_WISP=${GC_BEAD_ID:-}
 if [ -z "$CURRENT_WISP" ]; then
-  CURRENT_WISP=$(gc bd list --assignee="$GC_AGENT" --status=in_progress --type=molecule --limit=1 --json | jq -r '.[0].id // empty')
+  CURRENT_WISP=$(gc bd query --json 'ephemeral=true AND (status=open OR status=in_progress)' --limit=0 | jq -r --arg id "$GC_AGENT" --arg f mol-boot-patrol '[.[] | select((.assignee // "") == $id and (.title // "") == $f)] | sort_by((if .status == "in_progress" then 0 else 1 end), .created_at) | .[0].id // empty')
 fi
-ASSIGNED_WISP=$(gc bd list --assignee="$GC_AGENT" --status=open --type=molecule --limit=1 --json | jq -r '.[0].id // empty')
+ASSIGNED_WISP=$(gc bd query --json 'ephemeral=true AND (status=open OR status=in_progress)' --limit=0 | jq -r --arg id "$GC_AGENT" --arg f mol-boot-patrol --arg self "$CURRENT_WISP" '[.[] | select((.assignee // "") == $id and (.title // "") == $f and .id != $self)] | sort_by(.created_at) | .[0].id // empty')
 if [ -z "$ASSIGNED_WISP" ]; then
   NEXT=$(gc bd mol wisp mol-boot-patrol --root-only --var binding_prefix={{ .BindingPrefix }} --json | jq -r '.new_epic_id // empty')
   if [ -z "$NEXT" ]; then

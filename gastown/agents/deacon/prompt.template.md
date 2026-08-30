@@ -97,7 +97,7 @@ If `next-iteration` already ran, do not pour again; run `gc hook`.
 # burned below, never mistaken for an already-queued successor.
 CURRENT_WISP=${GC_BEAD_ID:-}
 if [ -z "$CURRENT_WISP" ]; then
-  CURRENT_WISP=$(gc bd query --json 'ephemeral=true AND status=in_progress' --limit=0 | jq -r --arg id "$GC_AGENT" --arg f mol-deacon-patrol '[.[] | select((.assignee // "") == $id and (.title // "") == $f)] | .[0].id // empty')
+  CURRENT_WISP=$(gc bd query --json 'ephemeral=true AND (status=open OR status=in_progress)' --limit=0 | jq -r --arg id "$GC_AGENT" --arg f mol-deacon-patrol '[.[] | select((.assignee // "") == $id and (.title // "") == $f)] | sort_by((if .status == "in_progress" then 0 else 1 end), .created_at) | .[0].id // empty')
 fi
 ASSIGNED_WISP=$(gc bd query --json 'ephemeral=true AND (status=open OR status=in_progress)' --limit=0 | jq -r --arg id "$GC_AGENT" --arg f mol-deacon-patrol --arg self "$CURRENT_WISP" '[.[] | select((.assignee // "") == $id and (.title // "") == $f and .id != $self)] | sort_by(.created_at) | .[0].id // empty')
 if [ -n "$CURRENT_WISP" ] && [ -z "$ASSIGNED_WISP" ]; then

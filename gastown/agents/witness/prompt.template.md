@@ -211,7 +211,7 @@ If `next-iteration` already ran, do not pour again; run `gc hook`.
 ```bash
 CURRENT_WISP=${GC_BEAD_ID:-}
 if [ -z "$CURRENT_WISP" ]; then
-  CURRENT_WISP=$(gc bd query --json 'ephemeral=true AND status=in_progress' --limit=0 | jq -r --arg id "$GC_AGENT" --arg f mol-witness-patrol '[.[] | select((.assignee // "") == $id and (.title // "") == $f)] | .[0].id // empty')
+  CURRENT_WISP=$(gc bd query --json 'ephemeral=true AND (status=open OR status=in_progress)' --limit=0 | jq -r --arg id "$GC_AGENT" --arg f mol-witness-patrol '[.[] | select((.assignee // "") == $id and (.title // "") == $f)] | sort_by((if .status == "in_progress" then 0 else 1 end), .created_at) | .[0].id // empty')
 fi
 # Reconcile queued patrol wisps — every one assigned to you EXCEPT the one you
 # are executing — to exactly one. A prior cycle may have poured a next wisp

@@ -61,8 +61,9 @@ label set:
 - `ref:<source-bead-id>` (for each source bead the rollup is about)
 
 `severity:escalate` means: this needs the human now. The downstream
-order will deliver it. Use sparingly — once delivered, the human is
-paged.
+order will deliver it **exactly once** and stamp it `delivered`; later
+edits to that bead never reach the human. Use sparingly, and read
+*Dedup and re-escalation* below before touching a delivered one.
 
 `severity:info` means: this is for the audit trail / weekly digest.
 Not delivered. Use freely.
@@ -78,6 +79,7 @@ Bead description must be exactly this template, filled in:
 ```
 Rig: {{ .Rig }}
 Project: <name from brief>
+Supersedes: <OPTIONAL, reissues only — id of the delivered escalate this replaces + one line on what changed since it was paged. Omit the whole line on a first page.>
 State: <one line — "healthy", "blocked on X", "needs decision on Y">
 Source bead(s): <comma-separated ids>
 Stuck since: <ISO 8601 timestamp of earliest source bead's relevant transition>
@@ -86,7 +88,8 @@ Smallest ask: <single concrete decision or question the human can answer in unde
 ```
 
 The downstream delivery pipeline parses this format. Drift from the
-template and your rollup will not be deliverable.
+template and your rollup will not be deliverable. `Supersedes:` is the
+only optional line and the only permitted addition.
 
 ### Slack-mrkdwn for any prose you write into the bead body
 
@@ -113,7 +116,13 @@ The `Smallest ask:` field of the template still gates whether
 `Why:` paragraph so the human can act on it in seconds rather than
 reading prose.
 
-## Dedup (mandatory)
+## Dedup and re-escalation (mandatory)
+
+**Delivery is once per bead id.** The `escalate-rollups` order delivers
+an open `severity:escalate` rollup, stamps it `delivered`, and never
+looks at it again. Editing a `delivered` bead changes the store and
+pages nobody. `delivered` is pipeline state — never add or remove it by
+hand. So a materially changed escalation needs a new bead, not a rewrite.
 
 Before writing a `severity:escalate` rollup, list existing open
 `severity:escalate` rollup beads for your rig:
@@ -122,9 +131,38 @@ Before writing a `severity:escalate` rollup, list existing open
 gc bd list --rig {{ .Rig }} --label rollup --label severity:escalate --status open --json
 ```
 
-If any of them have a `ref:<id>` matching one of your source beads,
-do NOT write a new one. Either update the existing bead's
-description (if the situation has materially changed) or skip.
+If none carries a `ref:<id>` matching one of your source beads, write
+the new rollup normally. Otherwise the match decides what you do:
+
+**a. Match is not yet `delivered`** — edit it in place. It has not been
+paged, and the order delivers whatever text is current when it fires.
+Do not write a second bead.
+
+**b. Match is `delivered`, nothing material changed** — skip. Cosmetic
+rewording, a restated ask, a tidier `Why:` — none of it is worth a
+second page. Put it in a note on the bead if the audit trail needs it.
+
+**c. Match is `delivered` and something material changed** — close and
+reissue. *Material* means the human's decision moved: the ask itself, the
+deadline, the recommended path, the cost of not answering, or an ask that
+has since expired.
+
+```bash
+# 1. close the stale page FIRST — the dedup query above reads --status
+#    open, so this is what makes the reissue legal, and it keeps the
+#    open-escalate count equal to the decisions actually waiting.
+gc bd close <old-id> --reason "Superseded: <what changed>. Reissue follows."
+
+# 2. write the new rollup: same ref: labels, plus supersedes:<old-id>,
+#    plus the Supersedes: description line.
+
+# 3. point the closed bead forward once the new id exists.
+gc bd update <old-id> --append-notes "Superseded by <new-id>."
+```
+
+This is still single-paging. The human holds a page whose content is now
+wrong; the reissue is the first time the current content reaches them.
+What the rule forbids is two *open* escalates for one decision.
 
 ## Replies From the Human
 
@@ -136,8 +174,9 @@ otherwise. When you receive one:
 1. Read the reply.
 2. Act on it (file beads, unblock coders, update priorities in your rig).
 3. Write a `severity:info` rollup with `state: "<original ask> resolved: <what the human decided>"` and the same `ref:` labels.
-4. Close the original `severity:escalate` rollup with status `closed`
-   and outcome in the closing comment.
+4. Close the open `severity:escalate` rollup — the live one at the end
+   of any supersede chain — with status `closed` and outcome in the
+   closing comment.
 
 ## Rig-Scoped Dispatch (your rig only)
 

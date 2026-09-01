@@ -30,6 +30,8 @@ mayor (city, unchanged) ──── plans cross-cutting work, handles escalatio
 
 The project-lead writes a rollup bead labeled `severity:escalate`. A scheduled order (`escalate-rollups`) uses a mechanical condition trigger that checks for undelivered escalate-severity rollups and delivers them via extmsg — **no second agent decides "is this escalation-worthy."** The judgment is made once, by the agent with the right context, and the rollup bead is the audit trail. Human replies route straight back to the bound project-lead.
 
+**Delivery is once per bead id.** A rollup is delivered, stamped `delivered`, and never revisited; the stamp is the only thing that ends the order's firing condition. Editing a delivered rollup therefore pages nobody — a materially changed escalation is closed and reissued as a new bead carrying `supersedes:<old-id>`. The project-lead prompt states the rule (*Dedup and re-escalation*); this is why `delivered` is pipeline state that no agent adds or removes by hand.
+
 ## What's in the pack
 
 - `agents/project-lead/` — the role (agent config, prompt template, and a `project-brief.template.md` to copy per rig)
